@@ -20,7 +20,7 @@ Add your Raspberry Pi's IP and the hostnames to /etc/hosts:
 192.168.1.78  to maps excalidraw
 ```
 
-3. Nginx Configuration
+## Nginx Configuration
 Copy `./nginx/to-links.conf` to `/etc/nginx/sites-available/`
 
 Enable it and restart Nginx:
@@ -30,12 +30,12 @@ sudo ln -s /etc/nginx/sites-available/to-links.conf /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-4. Rust Application Setup
+## Rust Application Setup
 
 Build the binary: `cargo build --release`
 
 Run the application: `./target/release/to-link-app` Note: The app listens on 127.0.0.1:3000 by default.
 
-5. Client Machine Setup (Windows/Mac)
-Ensure your machine's DNS is pointing to the Raspberry Pi IP (192.168.1.78).
+## Client Machine Setup (Windows/Mac)
+Ensure your machine's DNS is pointing to the Raspberry Pi IP.
 
