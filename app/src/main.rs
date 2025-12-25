@@ -254,7 +254,15 @@ impl IntoResponse for AppError {
         let template = FormErrorTemplate {
             message: &message,
         };
-        let mut res = (self.0, HtmlTemplate(template)).into_response();
+        // For client errors triggered by HTMX, we return 200 OK and use response headers
+        // to indicate that it's an "error" to be handled by HTMX.
+        // This avoids needing custom javascript to handle 4xx responses.
+        let status = if self.0.is_client_error() {
+            StatusCode::OK
+        } else {
+            self.0
+        };
+        let mut res = (status, HtmlTemplate(template)).into_response();
         res.headers_mut()
             .insert("HX-Retarget", "#form-error".parse().unwrap());
         res.headers_mut()
