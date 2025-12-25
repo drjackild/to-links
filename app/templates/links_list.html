@@ -1,0 +1,14 @@
+<table>
+    <thead>
+        <tr>
+            <th>Short Link</th>
+            <th>URL</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for link in links %}
+        {% include "link_row.html" %}
+        {% endfor %}
+    </tbody>
+</table>

@@ -1,0 +1,9 @@
+<tr id="link-{{ link.short_link }}">
+    <td><a href="{{ link.short_link }}" target="_blank">{{ link.short_link }}</a></td>
+    <td>{{ link.url }}</td>
+    <td>
+        <button class="delete-btn" hx-delete="/api/links/{{ link.short_link }}" hx-target="closest tr" hx-swap="outerHTML">
+            Delete
+        </button>
+    </td>
+</tr>
