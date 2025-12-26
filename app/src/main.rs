@@ -29,6 +29,7 @@ struct Args {
 struct Link {
     short_link: String,
     url: String,
+    created_at: chrono::NaiveDateTime,
 }
 
 #[derive(Deserialize)]
@@ -115,7 +116,8 @@ async fn main() -> anyhow::Result<()> {
         r#"
         CREATE TABLE IF NOT EXISTS links (
             short_link TEXT PRIMARY KEY NOT NULL,
-            url TEXT NOT NULL
+            url TEXT NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         "#,
     )
@@ -153,7 +155,7 @@ async fn redirect_link(
     State(state): State<AppState>,
     AxumPath(short_link): AxumPath<String>,
 ) -> Result<Response, AppError> {
-    let link: Option<Link> = sqlx::query_as("SELECT short_link, url FROM links WHERE short_link = ?")
+    let link: Option<Link> = sqlx::query_as("SELECT short_link, url, created_at FROM links WHERE short_link = ?")
         .bind(&short_link)
         .fetch_optional(&state.pool)
         .await
@@ -171,7 +173,7 @@ async fn redirect_link(
 }
 
 async fn list_links(State(state): State<AppState>) -> Result<impl IntoResponse, AppError> {
-    let links = sqlx::query_as::<_, Link>("SELECT short_link, url FROM links ORDER BY short_link")
+    let links = sqlx::query_as::<_, Link>("SELECT short_link, url, created_at FROM links ORDER BY created_at DESC")
         .fetch_all(&state.pool)
         .await
         .map_err(|_| {
@@ -218,10 +220,16 @@ async fn add_link(
         })?;
 
     if headers.contains_key("hx-request") {
-        let link = Link {
-            short_link: new_link.short_link,
-            url: new_link.url,
-        };
+        let link: Link = sqlx::query_as("SELECT short_link, url, created_at FROM links WHERE short_link = ?")
+            .bind(&new_link.short_link)
+            .fetch_one(&state.pool)
+            .await
+            .map_err(|_| {
+                AppError(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    anyhow::anyhow!("Failed to fetch created link"),
+                )
+            })?;
         Ok(HtmlTemplate(LinkRowTemplate { link }).into_response())
     } else {
         Ok(Redirect::to("/link").into_response())

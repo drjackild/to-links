@@ -9,6 +9,7 @@
         </button>
     </td>
     <td>{{ link.url }}</td>
+    <td>{{ link.created_at.format("%Y-%m-%d %H:%M") }}</td>
     <td>
         <button class="delete-btn" hx-delete="/api/links/{{ link.short_link }}" hx-target="closest tr" hx-swap="outerHTML">
             Delete
