@@ -15,11 +15,9 @@
        placeholder="Search links..."
        hx-get="/api/links"
        hx-trigger="keyup changed delay:500ms, search"
-       hx-target="#links-table-body"
-       hx-select="#links-table-body tr"
+       hx-target="#links-list"
        style="margin-bottom: 1em; width: 100%; box-sizing: border-box;">
 
-<div id="links-list" hx-get="/api/links" hx-trigger="load">
-    <p>Loading links...</p>
+<div id="links-list" hx-get="/api/links" hx-trigger="load">    <p>Loading links...</p>
 </div>
 {% endblock %}

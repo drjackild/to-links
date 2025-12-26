@@ -41,6 +41,18 @@ struct NewLink {
 #[derive(Deserialize)]
 struct SearchParams {
     q: Option<String>,
+    #[serde(default = "default_page")]
+    page: u32,
+    #[serde(default = "default_limit")]
+    limit: u32,
+}
+
+fn default_page() -> u32 {
+    1
+}
+
+fn default_limit() -> u32 {
+    10
 }
 
 // --- HTML Templates ---
@@ -59,6 +71,9 @@ struct CreateLinkTemplate {
 #[template(path = "links_list.html")]
 struct LinksListTemplate {
     links: Vec<Link>,
+    page: u32,
+    has_next: bool,
+    q: String,
 }
 
 #[derive(Template)]
@@ -193,25 +208,37 @@ async fn list_links(
     State(state): State<AppState>,
     Query(params): Query<SearchParams>,
 ) -> Result<impl IntoResponse, AppError> {
-    let sql = if let Some(q) = params.q.filter(|s| !s.trim().is_empty()) {
+    let limit = params.limit;
+    let offset = (params.page - 1) * limit;
+    let q = params.q.clone().unwrap_or_default();
+
+    let links = if !q.trim().is_empty() {
         // FTS5 MATCH query with trigram
-        // We search against the whole table row, simpler for trigram
         let query_str = format!("\"{}\"", q);
         sqlx::query_as::<_, Link>(
             "SELECT l.short_link, l.url, l.created_at 
              FROM links l
              JOIN links_fts f ON l.rowid = f.rowid
              WHERE links_fts MATCH ? 
-             ORDER BY rank",
+             ORDER BY rank
+             LIMIT ? OFFSET ?",
         )
         .bind(query_str)
+        .bind(limit + 1) // Fetch one extra to check for next page
+        .bind(offset)
+        .fetch_all(&state.pool)
+        .await
     } else {
         sqlx::query_as::<_, Link>(
-            "SELECT short_link, url, created_at FROM links ORDER BY created_at DESC",
+            "SELECT short_link, url, created_at FROM links ORDER BY created_at DESC LIMIT ? OFFSET ?",
         )
+        .bind(limit + 1) // Fetch one extra to check for next page
+        .bind(offset)
+        .fetch_all(&state.pool)
+        .await
     };
 
-    let links = sql.fetch_all(&state.pool).await.map_err(|e| {
+    let mut links = links.map_err(|e| {
         error!("Search error: {:?}", e);
         AppError(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -219,7 +246,17 @@ async fn list_links(
         )
     })?;
 
-    Ok(HtmlTemplate(LinksListTemplate { links }))
+    let has_next = links.len() > limit as usize;
+    if has_next {
+        links.pop();
+    }
+
+    Ok(HtmlTemplate(LinksListTemplate {
+        links,
+        page: params.page,
+        has_next,
+        q,
+    }))
 }
 
 async fn add_link(

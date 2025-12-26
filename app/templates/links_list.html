@@ -13,3 +13,29 @@
         {% endfor %}
     </tbody>
 </table>
+
+<div style="margin-top: 1.5em; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 1em;">
+    <div style="text-align: left;">
+        {% if page > 1 %}
+        <button hx-get="/api/links?page={{ page - 1 }}&q={{ q }}"
+                hx-target="#links-list"
+                class="btn-pagination">
+            &larr; Previous
+        </button>
+        {% endif %}
+    </div>
+    
+    <div style="font-size: 0.9em; color: #666; font-weight: bold;">
+        Page {{ page }}
+    </div>
+    
+    <div style="text-align: right;">
+        {% if has_next %}
+        <button hx-get="/api/links?page={{ page + 1 }}&q={{ q }}"
+                hx-target="#links-list"
+                class="btn-pagination">
+            Next &rarr;
+        </button>
+        {% endif %}
+    </div>
+</div>
