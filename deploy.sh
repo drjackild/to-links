@@ -26,15 +26,18 @@ else
 fi
 
 # 2. Deploy
+echo "Stopping service on $RPI_HOST..."
+ssh -t "$RPI_USER@$RPI_HOST" "sudo systemctl stop to-links || true"
+
 echo "Copying binary to $RPI_HOST:$TARGET_DIR..."
 # Ensure directory exists on RPi
 ssh "$RPI_USER@$RPI_HOST" "mkdir -p $TARGET_DIR"
 # Copy binary (path is relative to the 'app' directory we cd-ed into)
 scp "target/$TARGET_ARCH/release/$BINARY_NAME" "$RPI_USER@$RPI_HOST:$TARGET_DIR/to-links-app"
 
-# 3. Restart Service
-echo "Restarting to-links service on $RPI_HOST..."
-ssh -t "$RPI_USER@$RPI_HOST" "sudo systemctl restart to-links || echo 'Service not found or failed to restart (ignore if first deploy)'"
+# 3. Start Service
+echo "Starting to-links service on $RPI_HOST..."
+ssh -t "$RPI_USER@$RPI_HOST" "sudo systemctl start to-links || echo 'Service not found or failed to start'"
 
 echo "Deployment successful!"
 
