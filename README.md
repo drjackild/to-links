@@ -41,10 +41,16 @@ local=/lan/
 ```
 
 ## Local Hosts Entry
-Add your Raspberry Pi's IP and the hostnames to /etc/hosts:
+Add local shortcuts for dnsmasq (you can copy from dnsmasq folder)
 
 ```text
-192.168.1.78  to maps excalidraw
+# Map the short names to the Pi's IP
+address=/to/192.168.1.78
+address=/to.lan/192.168.1.78
+address=/maps/192.168.1.78
+address=/maps.lan/192.168.1.78
+address=/excalidraw/192.168.1.78
+address=/excalidraw.lan/192.168.1.78
 ```
 
 ## Nginx Configuration
@@ -56,6 +62,43 @@ Enable it and restart Nginx:
 sudo ln -s /etc/nginx/sites-available/to-links.conf /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 ```
+
+## Prevent Automatic Overwriting of resolv.conf
+
+On newer Raspberry Pi OS versions (Bookworm), **NetworkManager** manages network settings. By default, it will overwrite `/etc/resolv.conf` with your router's DNS (e.g., AT&T). 
+
+To force the Pi to use the local `dnsmasq` instance (127.0.0.1) permanently:
+
+1. **Find your connection name:**
+   ```bash
+   nmcli connection show
+   ```
+
+(Common names: "Wired connection 1" or "preconfigured")
+
+Update the connection settings: Replace YOUR_CONNECTION_NAME with the name from the step above:
+
+```bash
+
+# Set DNS to localhost
+sudo nmcli connection modify "YOUR_CONNECTION_NAME" ipv4.dns "127.0.0.1"
+
+# Tell NetworkManager to ignore DNS provided by your Router's DHCP
+sudo nmcli connection modify "YOUR_CONNECTION_NAME" ipv4.ignore-auto-dns yes
+
+# Apply the changes immediately
+sudo nmcli connection up "YOUR_CONNECTION_NAME"
+```
+
+Verify: Check the file content. It should now stay as nameserver 127.0.0.1 even after a reboot:
+
+```bash
+cat /etc/resolv.conf
+```
+
+**Why only 127.0.0.1?**
+
+Since dnsmasq is already configured with upstream resolvers (like 8.8.8.8), you only want the OS to talk to the Pi itself. This ensures that local shortcuts like to/ are always checked first, while external sites like google.com are transparently forwarded by dnsmasq.
 
 ## Rust Application Setup
 
