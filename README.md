@@ -5,6 +5,33 @@ This project provides a local DNS-based shortcut system for your home network.
 - `http://to/` handles dynamic user-defined links stored in SQLite.
 - `http://to/link` provides a management UI powered by Rust & HTMX.
 
+## Features
+
+- **Dashboard**: Manage all your short links at `http://to/link`.
+- **Smart 404 Handling**: If you navigate to a non-existent short link (e.g., `http://to/new-idea`), the app acts as a creation page, prompting you to define the target URL immediately.
+- **Fast & Lightweight**: Built with Rust, Axum, and SQLite for minimal resource usage on Raspberry Pi.
+
+## Architecture
+
+```mermaid
+graph TD
+    Client["Client Device<br/>(PC/Phone)"] -- "DNS Query: to, maps..." --> DNS["RPi: Dnsmasq"]
+    DNS -- "Resolve to RPi IP" --> Client
+    Client -- "HTTP Request (port 80)" --> Nginx["RPi: Nginx"]
+    
+    subgraph "Raspberry Pi"
+        DNS
+        Nginx
+        
+        subgraph "Nginx Routing"
+            Nginx -- "Host: maps, excalidraw" --> Ext["External Sites"]
+            Nginx -- "Host: to" --> RustApp["Rust App<br/>(127.0.0.1:3000)"]
+        end
+        
+        RustApp -- "Read/Write" --> SQLite[("SQLite DB")]
+    end
+```
+
 ## DNS Server Configuration (dnsmasq)
 Ensure `/etc/dnsmasq.conf` on your Raspberry Pi includes:
 ```text
