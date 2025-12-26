@@ -124,7 +124,7 @@ async fn main() -> anyhow::Result<()> {
             url TEXT NOT NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
-        CREATE VIRTUAL TABLE IF NOT EXISTS links_fts USING fts5(short_link, url, content='links', content_rowid='rowid');
+        CREATE VIRTUAL TABLE IF NOT EXISTS links_fts USING fts5(short_link, url, content='links', content_rowid='rowid', tokenize='trigram');
         CREATE TRIGGER IF NOT EXISTS links_ai AFTER INSERT ON links BEGIN
             INSERT INTO links_fts(rowid, short_link, url) VALUES (new.rowid, new.short_link, new.url);
         END;
@@ -194,8 +194,9 @@ async fn list_links(
     Query(params): Query<SearchParams>,
 ) -> Result<impl IntoResponse, AppError> {
     let sql = if let Some(q) = params.q.filter(|s| !s.trim().is_empty()) {
-        // FTS5 MATCH query
-        let query_str = format!("short_link:\"{0}\"* OR url:\"{0}\"*", q);
+        // FTS5 MATCH query with trigram
+        // We search against the whole table row, simpler for trigram
+        let query_str = format!("\"{}\"", q);
         sqlx::query_as::<_, Link>(
             "SELECT l.short_link, l.url, l.created_at 
              FROM links l
