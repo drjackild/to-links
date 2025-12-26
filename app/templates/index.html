@@ -2,7 +2,7 @@
 
 {% block content %}
 <h2>Add New Link</h2>
-<form hx-post="/api/links" hx-target="#links-table-body" hx-swap="beforeend">
+<form hx-post="/api/links" hx-target="#links-table-body" hx-swap="beforeend" hx-on::after-request="if(event.detail.successful && event.detail.xhr.getResponseHeader('HX-Retarget') !== '#form-error') { this.reset(); document.getElementById('form-error').innerHTML = ''; }">
     <input type="text" name="short_link" placeholder="short-link" required>
     <input type="url" name="url" placeholder="https://example.com" required>
     <button type="submit">Add</button>
