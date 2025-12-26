@@ -12,11 +12,11 @@ echo "Starting deployment for user $RPI_USER to $RPI_HOST..."
 
 # 1. Build for aarch64
 echo "Building binary for $TARGET_ARCH..."
-if command -v cross &> /dev/null; then
-    cross build --release --target $TARGET_ARCH
+if command -v cross &>/dev/null; then
+  cross build --release --target $TARGET_ARCH
 else
-    # Ensure the linker is available or configured in .cargo/config.toml
-    cargo build --release --target $TARGET_ARCH
+  # Ensure the linker is available or configured in .cargo/config.toml
+  cargo build --release --target $TARGET_ARCH
 fi
 
 # 2. Deploy
@@ -32,3 +32,4 @@ echo "Restarting to-links service on $RPI_HOST..."
 ssh -t "$RPI_USER@$RPI_HOST" "sudo systemctl restart to-links || echo 'Service not found or failed to restart (ignore if first deploy)'"
 
 echo "Deployment successful!"
+

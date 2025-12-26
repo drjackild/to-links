@@ -11,6 +11,10 @@ This is the URL shortener application component.
     rustup target add aarch64-unknown-linux-gnu
     ```
 2.  **Linker**: Install `aarch64-linux-gnu-gcc` on your host system.
+    [Optional] you can install `cross` to make it easier:
+    ```bash
+    cargo install cross
+    ```
 3.  **SSH**: SSH public key authentication should be configured for user `drjackild` on `rpi-b`.
 
 ### Deployment Script
