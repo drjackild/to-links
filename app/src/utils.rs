@@ -28,3 +28,18 @@ pub fn levenshtein(a: &str, b: &str) -> usize {
     }
     dp[len_a][len_b]
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_levenshtein_distance() {
+        assert_eq!(levenshtein("kitten", "sitting"), 3);
+        assert_eq!(levenshtein("book", "back"), 2);
+        assert_eq!(levenshtein("kubernetes", "kubernetes"), 0);
+        assert_eq!(levenshtein("kubernetes", "kbernetes"), 1); // missing u
+        assert_eq!(levenshtein("", "abc"), 3);
+        assert_eq!(levenshtein("abc", ""), 3);
+    }
+}

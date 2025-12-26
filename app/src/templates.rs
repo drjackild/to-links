@@ -1,5 +1,5 @@
-use askama::Template;
 use crate::models::Link;
+use askama::Template;
 
 #[derive(Template)]
 #[template(path = "index.html")]

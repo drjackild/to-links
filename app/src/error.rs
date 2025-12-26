@@ -1,10 +1,10 @@
+use crate::templates::FormErrorTemplate;
+use askama::Template;
 use axum::{
     http::StatusCode,
     response::{Html, IntoResponse, Response},
 };
-use askama::Template;
 use tracing::error;
-use crate::templates::FormErrorTemplate;
 
 pub struct AppError(pub StatusCode, pub anyhow::Error);
 

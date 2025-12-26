@@ -1,8 +1,8 @@
 use axum::{
+    Form,
     extract::{Path as AxumPath, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Redirect, Response},
-    Form,
 };
 use tracing::error;
 
@@ -153,15 +153,8 @@ pub async fn add_link(
     Form(new_link): Form<NewLink>,
 ) -> Result<Response, AppError> {
     // Basic validation for short_link
-    let is_valid = new_link
-        .short_link
-        .chars()
-        .all(|c| c.is_alphanumeric() || c == '.' || c == '-' || c == ':');
-    if !is_valid || new_link.short_link.is_empty() {
-        return Err(AppError(
-            StatusCode::BAD_REQUEST,
-            anyhow::anyhow!("Invalid characters in short link"),
-        ));
+    if let Err(e) = new_link.validate() {
+        return Err(AppError(StatusCode::BAD_REQUEST, anyhow::anyhow!(e)));
     }
 
     sqlx::query("INSERT INTO links (short_link, url) VALUES (?, ?)")
@@ -186,12 +179,12 @@ pub async fn add_link(
                 .bind(&new_link.short_link)
                 .fetch_one(&state.pool)
                 .await
-                .map_err(|_|
+                .map_err(|_| {
                     AppError(
                         StatusCode::INTERNAL_SERVER_ERROR,
                         anyhow::anyhow!("Failed to fetch created link"),
                     )
-                )?;
+                })?;
         Ok(HtmlTemplate(LinkRowTemplate { link }).into_response())
     } else {
         Ok(Redirect::to("/link").into_response())
@@ -206,12 +199,12 @@ pub async fn delete_link(
         .bind(short_link)
         .execute(&state.pool)
         .await
-        .map_err(|_|
+        .map_err(|_| {
             AppError(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 anyhow::anyhow!("Failed to delete link"),
             )
-        )?;
+        })?;
 
     if result.rows_affected() == 0 {
         return Err(AppError(
