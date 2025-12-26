@@ -1,7 +1,7 @@
 use askama::Template;
 use axum::{
     Form, Router,
-    extract::{Path as AxumPath, State},
+    extract::{Path as AxumPath, Query, State},
     http::{HeaderMap, StatusCode},
     response::{Html, IntoResponse, Redirect, Response},
     routing::{delete, get},
@@ -36,6 +36,11 @@ struct Link {
 struct NewLink {
     short_link: String,
     url: String,
+}
+
+#[derive(Deserialize)]
+struct SearchParams {
+    q: Option<String>,
 }
 
 // --- HTML Templates ---
@@ -119,6 +124,17 @@ async fn main() -> anyhow::Result<()> {
             url TEXT NOT NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE VIRTUAL TABLE IF NOT EXISTS links_fts USING fts5(short_link, url, content='links', content_rowid='rowid');
+        CREATE TRIGGER IF NOT EXISTS links_ai AFTER INSERT ON links BEGIN
+            INSERT INTO links_fts(rowid, short_link, url) VALUES (new.rowid, new.short_link, new.url);
+        END;
+        CREATE TRIGGER IF NOT EXISTS links_ad AFTER DELETE ON links BEGIN
+            INSERT INTO links_fts(links_fts, rowid, short_link, url) VALUES('delete', old.rowid, old.short_link, old.url);
+        END;
+        CREATE TRIGGER IF NOT EXISTS links_au AFTER UPDATE ON links BEGIN
+            INSERT INTO links_fts(links_fts, rowid, short_link, url) VALUES('delete', old.rowid, old.short_link, old.url);
+            INSERT INTO links_fts(rowid, short_link, url) VALUES (new.rowid, new.short_link, new.url);
+        END;
         "#,
     )
     .execute(&pool)
@@ -155,16 +171,17 @@ async fn redirect_link(
     State(state): State<AppState>,
     AxumPath(short_link): AxumPath<String>,
 ) -> Result<Response, AppError> {
-    let link: Option<Link> = sqlx::query_as("SELECT short_link, url, created_at FROM links WHERE short_link = ?")
-        .bind(&short_link)
-        .fetch_optional(&state.pool)
-        .await
-        .map_err(|_| {
-            AppError(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                anyhow::anyhow!("Database error"),
-            )
-        })?;
+    let link: Option<Link> =
+        sqlx::query_as("SELECT short_link, url, created_at FROM links WHERE short_link = ?")
+            .bind(&short_link)
+            .fetch_optional(&state.pool)
+            .await
+            .map_err(|_| {
+                AppError(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    anyhow::anyhow!("Database error"),
+                )
+            })?;
 
     match link {
         Some(l) => Ok(Redirect::to(&l.url).into_response()),
@@ -172,16 +189,34 @@ async fn redirect_link(
     }
 }
 
-async fn list_links(State(state): State<AppState>) -> Result<impl IntoResponse, AppError> {
-    let links = sqlx::query_as::<_, Link>("SELECT short_link, url, created_at FROM links ORDER BY created_at DESC")
-        .fetch_all(&state.pool)
-        .await
-        .map_err(|_| {
-            AppError(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                anyhow::anyhow!("Failed to fetch links"),
-            )
-        })?;
+async fn list_links(
+    State(state): State<AppState>,
+    Query(params): Query<SearchParams>,
+) -> Result<impl IntoResponse, AppError> {
+    let sql = if let Some(q) = params.q.filter(|s| !s.trim().is_empty()) {
+        // FTS5 MATCH query
+        let query_str = format!("short_link:\"{0}\"* OR url:\"{0}\"*", q);
+        sqlx::query_as::<_, Link>(
+            "SELECT l.short_link, l.url, l.created_at 
+             FROM links l
+             JOIN links_fts f ON l.rowid = f.rowid
+             WHERE links_fts MATCH ? 
+             ORDER BY rank",
+        )
+        .bind(query_str)
+    } else {
+        sqlx::query_as::<_, Link>(
+            "SELECT short_link, url, created_at FROM links ORDER BY created_at DESC",
+        )
+    };
+
+    let links = sql.fetch_all(&state.pool).await.map_err(|e| {
+        error!("Search error: {:?}", e);
+        AppError(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            anyhow::anyhow!("Failed to fetch links"),
+        )
+    })?;
 
     Ok(HtmlTemplate(LinksListTemplate { links }))
 }
@@ -220,16 +255,17 @@ async fn add_link(
         })?;
 
     if headers.contains_key("hx-request") {
-        let link: Link = sqlx::query_as("SELECT short_link, url, created_at FROM links WHERE short_link = ?")
-            .bind(&new_link.short_link)
-            .fetch_one(&state.pool)
-            .await
-            .map_err(|_| {
-                AppError(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    anyhow::anyhow!("Failed to fetch created link"),
-                )
-            })?;
+        let link: Link =
+            sqlx::query_as("SELECT short_link, url, created_at FROM links WHERE short_link = ?")
+                .bind(&new_link.short_link)
+                .fetch_one(&state.pool)
+                .await
+                .map_err(|_| {
+                    AppError(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        anyhow::anyhow!("Failed to fetch created link"),
+                    )
+                })?;
         Ok(HtmlTemplate(LinkRowTemplate { link }).into_response())
     } else {
         Ok(Redirect::to("/link").into_response())
@@ -269,9 +305,7 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         error!("Error: {:?}", self.1);
         let message = self.1.to_string();
-        let template = FormErrorTemplate {
-            message: &message,
-        };
+        let template = FormErrorTemplate { message: &message };
         // For client errors triggered by HTMX, we return 200 OK and use response headers
         // to indicate that it's an "error" to be handled by HTMX.
         // This avoids needing custom javascript to handle 4xx responses.
