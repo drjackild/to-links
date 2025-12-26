@@ -2,7 +2,7 @@ use askama::Template;
 use axum::{
     Form, Router,
     extract::{Path as AxumPath, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{Html, IntoResponse, Redirect, Response},
     routing::{delete, get},
 };
@@ -42,6 +42,12 @@ struct NewLink {
 #[derive(Template)]
 #[template(path = "index.html")]
 struct IndexTemplate;
+
+#[derive(Template)]
+#[template(path = "create_link.html")]
+struct CreateLinkTemplate {
+    short_link: String,
+}
 
 #[derive(Template)]
 #[template(path = "links_list.html")]
@@ -146,22 +152,22 @@ async fn show_ui() -> impl IntoResponse {
 async fn redirect_link(
     State(state): State<AppState>,
     AxumPath(short_link): AxumPath<String>,
-) -> Result<Redirect, AppError> {
-    let link: Link = sqlx::query_as("SELECT short_link, url FROM links WHERE short_link = ?")
-        .bind(short_link)
-        .fetch_one(&state.pool)
+) -> Result<Response, AppError> {
+    let link: Option<Link> = sqlx::query_as("SELECT short_link, url FROM links WHERE short_link = ?")
+        .bind(&short_link)
+        .fetch_optional(&state.pool)
         .await
-        .map_err(|e| match e {
-            sqlx::Error::RowNotFound => {
-                AppError(StatusCode::NOT_FOUND, anyhow::anyhow!("Link not found"))
-            }
-            _ => AppError(
+        .map_err(|_| {
+            AppError(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 anyhow::anyhow!("Database error"),
-            ),
+            )
         })?;
 
-    Ok(Redirect::to(&link.url))
+    match link {
+        Some(l) => Ok(Redirect::to(&l.url).into_response()),
+        None => Ok(HtmlTemplate(CreateLinkTemplate { short_link }).into_response()),
+    }
 }
 
 async fn list_links(State(state): State<AppState>) -> Result<impl IntoResponse, AppError> {
@@ -180,8 +186,9 @@ async fn list_links(State(state): State<AppState>) -> Result<impl IntoResponse, 
 
 async fn add_link(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Form(new_link): Form<NewLink>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<Response, AppError> {
     // Basic validation for short_link
     let is_valid = new_link
         .short_link
@@ -210,12 +217,15 @@ async fn add_link(
             ),
         })?;
 
-    let link = Link {
-        short_link: new_link.short_link,
-        url: new_link.url,
-    };
-
-    Ok(HtmlTemplate(LinkRowTemplate { link }))
+    if headers.contains_key("hx-request") {
+        let link = Link {
+            short_link: new_link.short_link,
+            url: new_link.url,
+        };
+        Ok(HtmlTemplate(LinkRowTemplate { link }).into_response())
+    } else {
+        Ok(Redirect::to("/link").into_response())
+    }
 }
 
 async fn delete_link(

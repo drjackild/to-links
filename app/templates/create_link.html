@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Link not found</h2>
+<p>The link <strong>{{ short_link }}</strong> does not exist. Would you like to create it?</p>
+
+<form action="/api/links" method="POST">
+    <input type="hidden" name="short_link" value="{{ short_link }}">
+    <label for="url">Target URL:</label>
+    <input type="url" name="url" placeholder="https://example.com" required autofocus>
+    <button type="submit">Create Link</button>
+</form>
+
+<p><a href="/link">Back to Dashboard</a></p>
+{% endblock %}
