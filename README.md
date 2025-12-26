@@ -36,8 +36,29 @@ Build the binary: `cargo build --release`
 
 Run the application: `./target/release/to-link-app` Note: The app listens on 127.0.0.1:3000 by default.
 
-## Client Machine Setup (Windows/Mac)
-Ensure your machine's DNS is pointing to the Raspberry Pi IP.
+## Cross-compilation and deployment
+
+### Prerequisites
+
+1.  **Cross-Compilation Target**:
+    ```bash
+    rustup target add aarch64-unknown-linux-gnu
+    ```
+2.  **Linker**: Install `aarch64-linux-gnu-gcc` on your host system.
+    [Optional] you can install `cross` to make it easier:
+    ```bash
+    cargo install cross
+    ```
+3.  **SSH**: SSH public key authentication should be configured for user `drjackild` on `rpi-b`.
+
+### Deployment Script
+
+Use the provided `deploy.sh` script to build and upload the binary:
+
+```bash
+chmod +x deploy.sh
+./deploy.sh
+```
 
 ## Systemd Service Configuration
 
@@ -70,4 +91,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now to-links
 sudo systemctl status to-links
 ```
+
+## Client Machine Setup (Windows/Mac)
+Ensure your machine's DNS is pointing to the Raspberry Pi IP.
 
