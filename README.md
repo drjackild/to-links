@@ -8,6 +8,7 @@ This project provides a local DNS-based shortcut system for your home network.
 ## Features
 
 - **Dashboard**: Manage all your short links at `http://to/link`.
+- **Fuzzy search**: Search your links with fuzzy search (using SQLite full text search and Levenstein distance algorithm)
 - **Smart 404 Handling**: If you navigate to a non-existent short link (e.g., `http://to/new-idea`), the app acts as a creation page, prompting you to define the target URL immediately.
 - **Fast & Lightweight**: Built with Rust, Axum, and SQLite for minimal resource usage on Raspberry Pi.
 

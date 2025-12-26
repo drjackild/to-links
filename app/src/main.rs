@@ -25,7 +25,7 @@ struct Args {
 
 // --- Database Models ---
 
-#[derive(sqlx::FromRow, Debug)]
+#[derive(sqlx::FromRow, Debug, Clone)]
 struct Link {
     short_link: String,
     url: String,
@@ -204,6 +204,37 @@ async fn redirect_link(
     }
 }
 
+fn levenshtein(a: &str, b: &str) -> usize {
+    let len_a = a.chars().count();
+    let len_b = b.chars().count();
+    if len_a == 0 {
+        return len_b;
+    }
+    if len_b == 0 {
+        return len_a;
+    }
+
+    let mut dp = vec![vec![0; len_b + 1]; len_a + 1];
+
+    for i in 0..=len_a {
+        dp[i][0] = i;
+    }
+    for j in 0..=len_b {
+        dp[0][j] = j;
+    }
+
+    for (i, ca) in a.chars().enumerate() {
+        for (j, cb) in b.chars().enumerate() {
+            let cost = if ca == cb { 0 } else { 1 };
+            dp[i + 1][j + 1] = std::cmp::min(
+                dp[i][j + 1] + 1,
+                std::cmp::min(dp[i + 1][j] + 1, dp[i][j] + cost),
+            );
+        }
+    }
+    dp[len_a][len_b]
+}
+
 async fn list_links(
     State(state): State<AppState>,
     Query(params): Query<SearchParams>,
@@ -211,23 +242,75 @@ async fn list_links(
     let limit = params.limit;
     let offset = (params.page - 1) * limit;
     let q = params.q.clone().unwrap_or_default();
+    let q_trim = q.trim();
 
-    let links = if !q.trim().is_empty() {
-        // FTS5 MATCH query with trigram
-        let query_str = format!("\"{}\"", q);
-        sqlx::query_as::<_, Link>(
+    let links = if !q_trim.is_empty() {
+        // Advanced Fuzzy Search
+        // 1. If short (<=3 chars), use standard prefix/trigram match
+        // 2. If long, break into trigrams and OR them to find candidates
+
+        let query_str = if q_trim.chars().count() <= 3 {
+            format!("\"{}\"", q_trim)
+        } else {
+            // Generate trigrams: "kubernetes" -> "kub" OR "ube" OR "ber" ...
+            let chars: Vec<char> = q_trim.chars().collect();
+            let mut trigrams = Vec::new();
+            for i in 0..chars.len().saturating_sub(2) {
+                let trigram: String = chars[i..i + 3].iter().collect();
+                // Escape double quotes just in case
+                let safe_tri = trigram.replace("\"", "\"\"");
+                trigrams.push(format!("\"{}\"", safe_tri));
+            }
+            if trigrams.is_empty() {
+                format!("\"{}\"", q_trim)
+            } else {
+                trigrams.join(" OR ")
+            }
+        };
+
+        // Fetch MORE candidates than the limit to allow re-sorting
+        // We'll fetch 4x the limit to have a good pool of candidates
+        let candidate_limit = limit * 4;
+
+        let mut candidates = sqlx::query_as::<_, Link>(
             "SELECT l.short_link, l.url, l.created_at 
              FROM links l
              JOIN links_fts f ON l.rowid = f.rowid
              WHERE links_fts MATCH ? 
              ORDER BY rank
-             LIMIT ? OFFSET ?",
+             LIMIT ?",
         )
         .bind(query_str)
-        .bind(limit + 1) // Fetch one extra to check for next page
-        .bind(offset)
+        .bind(candidate_limit)
         .fetch_all(&state.pool)
         .await
+        .map_err(|e| {
+            error!("Search error: {:?}", e);
+            AppError(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                anyhow::anyhow!("Failed to fetch links"),
+            )
+        })?;
+
+        // Refine sorting with Levenshtein in memory
+        candidates.sort_by(|a, b| {
+            let dist_a = levenshtein(&a.short_link, q_trim);
+            let dist_b = levenshtein(&b.short_link, q_trim);
+            dist_a.cmp(&dist_b)
+        });
+
+        // Apply pagination in memory since we re-sorted
+        // (Note: this simple pagination approach resets scope to the fetched candidates)
+        // For true deep pagination with sorting, we'd need to fetch all candidates,
+        // but for a fuzzy search, usually only the top results matter.
+        let start = offset as usize;
+        let end = std::cmp::min(start + limit as usize + 1, candidates.len());
+
+        if start >= candidates.len() {
+            Vec::new()
+        } else {
+            candidates[start..end].to_vec()
+        }
     } else {
         sqlx::query_as::<_, Link>(
             "SELECT short_link, url, created_at FROM links ORDER BY created_at DESC LIMIT ? OFFSET ?",
@@ -236,17 +319,17 @@ async fn list_links(
         .bind(offset)
         .fetch_all(&state.pool)
         .await
+        .map_err(|e| {
+            error!("Search error: {:?}", e);
+            AppError(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                anyhow::anyhow!("Failed to fetch links"),
+            )
+        })?
     };
 
-    let mut links = links.map_err(|e| {
-        error!("Search error: {:?}", e);
-        AppError(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            anyhow::anyhow!("Failed to fetch links"),
-        )
-    })?;
-
     let has_next = links.len() > limit as usize;
+    let mut links = links; // make mutable
     if has_next {
         links.pop();
     }
