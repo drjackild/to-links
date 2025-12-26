@@ -115,7 +115,9 @@ Run the application: `./target/release/to-link-app` Note: The app listens on 127
     rustup target add aarch64-unknown-linux-gnu
     ```
 2.  **Linker**: Install `aarch64-linux-gnu-gcc` on your host system.
+
     [Optional] you can install `cross` to make it easier:
+
     ```bash
     cargo install cross
     ```
