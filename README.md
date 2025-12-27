@@ -1,5 +1,7 @@
 # Raspberry Pi Shortcut Network
 
+> **Note:** This is a personal project created primarily for my own use and to fit my specific home network setup.
+
 ![to-links Dashboard](images/to-links.jpg)
 
 This project provides a local DNS-based shortcut system for your home network.
