@@ -1,0 +1,7 @@
+# Map the short names to the Pi's IP
+address=/to/${RPI_IP}
+address=/to.lan/${RPI_IP}
+address=/maps/${RPI_IP}
+address=/maps.lan/${RPI_IP}
+address=/excalidraw/${RPI_IP}
+address=/excalidraw.lan/${RPI_IP}

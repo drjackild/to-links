@@ -1,43 +1,68 @@
 #!/bin/bash
 set -e
 
-# Configuration
-RPI_HOST="rpi-b"
-RPI_USER="drjackild"
-TARGET_DIR="/home/$RPI_USER/to-links"
-BINARY_NAME="app" # Based on Cargo.toml package name
-TARGET_ARCH="aarch64-unknown-linux-gnu"
-
-echo "Starting deployment for user $RPI_USER to $RPI_HOST..."
-
-# 1. Build for aarch64
-# Navigate to the 'app' subdirectory relative to the script location
-cd "$(dirname "$0")/app" || {
-  echo "Error: 'app' directory not found"
-  exit 1
-}
-
-echo "Building binary for $TARGET_ARCH in $(pwd)..."
-if command -v cross &>/dev/null; then
-  cross build --release --target $TARGET_ARCH
+# Load configuration
+if [ -f .env ]; then
+  # Use 'allexport' to correctly handle variables with spaces or special characters
+  set -a
+  source .env
+  set +a
 else
-  # Ensure the linker is available or configured in .cargo/config.toml
-  cargo build --release --target $TARGET_ARCH
+  echo "Error: .env file not found. Copy .env.example to .env and configure it."
+  exit 1
 fi
 
-# 2. Deploy
-echo "Stopping service on $RPI_HOST..."
+BINARY_NAME="app"
+
+echo "Starting deployment to $RPI_HOST..."
+
+# 1. Build
+echo "Building binary for $TARGET_ARCH..."
+if command -v cross &>/dev/null; then
+  cross build --release --target $TARGET_ARCH --manifest-path app/Cargo.toml
+else
+  cargo build --release --target $TARGET_ARCH --manifest-path app/Cargo.toml
+fi
+
+# 2. Prepare Config Files
+echo "Generating configuration files from templates..."
+# Handle optional DB_PATH
+if [ -n "$DB_PATH" ]; then
+  export DB_ARG="--db $DB_PATH"
+else
+  export DB_ARG=""
+fi
+
+# Note: envsubst is part of gettext package
+envsubst < systemd/to-links.service.template > systemd/to-links.service
+envsubst < nginx/to-links.conf.template > nginx/to-links.conf
+envsubst < dnsmasq/shortcuts.conf.template > dnsmasq/shortcuts.conf
+
+# 3. Deploy
+echo "Deploying to $RPI_HOST..."
+
+# Stop service
 ssh -t "$RPI_USER@$RPI_HOST" "sudo systemctl stop to-links || true"
 
-echo "Copying binary to $RPI_HOST:$TARGET_DIR..."
-# Ensure directory exists on RPi
+# Create target directory
 ssh "$RPI_USER@$RPI_HOST" "mkdir -p $TARGET_DIR"
-# Copy binary (path is relative to the 'app' directory we cd-ed into)
-scp "target/$TARGET_ARCH/release/$BINARY_NAME" "$RPI_USER@$RPI_HOST:$TARGET_DIR/to-links-app"
 
-# 3. Start Service
-echo "Starting to-links service on $RPI_HOST..."
-ssh -t "$RPI_USER@$RPI_HOST" "sudo systemctl start to-links || echo 'Service not found or failed to start'"
+# Copy binary
+echo "Copying binary..."
+scp "app/target/$TARGET_ARCH/release/$BINARY_NAME" "$RPI_USER@$RPI_HOST:$TARGET_DIR/to-links-app"
+
+# Copy systemd service
+echo "Installing systemd service..."
+scp "systemd/to-links.service" "$RPI_USER@$RPI_HOST:/tmp/to-links.service"
+ssh -t "$RPI_USER@$RPI_HOST" "sudo mv /tmp/to-links.service /etc/systemd/system/to-links.service && sudo systemctl daemon-reload"
+
+# Copy generated configs to the target dir for convenience
+scp "nginx/to-links.conf" "$RPI_USER@$RPI_HOST:$TARGET_DIR/"
+scp "dnsmasq/shortcuts.conf" "$RPI_USER@$RPI_HOST:$TARGET_DIR/"
+
+# 4. Start Service
+echo "Starting service..."
+ssh -t "$RPI_USER@$RPI_HOST" "sudo systemctl enable to-links && sudo systemctl start to-links"
 
 echo "Deployment successful!"
-
+echo "NOTE: Generated Nginx and Dnsmasq configs are at $TARGET_DIR on the remote host."

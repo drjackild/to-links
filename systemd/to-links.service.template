@@ -4,12 +4,11 @@ After=network.target
 
 [Service]
 Type=simple
-User=drjackild
-WorkingDirectory=/home/drjackild/to-links
-ExecStart=to-links-app
+User=${RPI_USER}
+WorkingDirectory=${TARGET_DIR}
+ExecStart=${TARGET_DIR}/to-links-app --port ${APP_PORT} ${DB_ARG}
 Restart=always
 Environment=RUST_LOG=info
 
 [Install]
 WantedBy=multi-user.target
-

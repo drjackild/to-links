@@ -10,6 +10,8 @@ use app::{create_router, setup_db, state::AppState};
 struct Args {
     #[arg(long)]
     db: Option<String>,
+    #[arg(long, default_value = "3000")]
+    port: u16,
 }
 
 #[tokio::main]
@@ -40,7 +42,7 @@ async fn main() -> anyhow::Result<()> {
     let app_state = AppState { pool };
     let app = create_router(app_state);
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
+    let addr = SocketAddr::from(([0, 0, 0, 0], args.port));
     info!("Listening on {}", addr);
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;

@@ -18,7 +18,7 @@ server {
     server_name to to.lan;
 
     location / {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://${APP_HOST}:${APP_PORT};
         # Crucial: Send 'to' as the host header so your Rust app doesn't get confused
         proxy_set_header Host to; 
         proxy_set_header X-Real-IP $remote_addr;
